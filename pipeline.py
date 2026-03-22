@@ -23,7 +23,12 @@ logger = logging.getLogger(__name__)
 
 # ─── Background removal ───────────────────────────────────────────────────────
 
-def remove_white_background(image: Image.Image, threshold: int = 230) -> Image.Image:
+def remove_white_background(
+    image: Image.Image,
+    threshold: int = 225,
+    border_tolerance: int = 38,
+    max_saturation_delta: int = 26,
+) -> Image.Image:
     """
     Remove white / near-white background using BFS flood-fill from image edges.
     Pixels with R,G,B all >= threshold that are reachable from the border are
@@ -33,12 +38,32 @@ def remove_white_background(image: Image.Image, threshold: int = 230) -> Image.I
     data = np.array(img, dtype=np.uint8)
     h, w = data.shape[:2]
 
+    # Sample the image border so we can handle off-white / lightly shaded
+    # backgrounds that DALL-E often returns instead of pure white.
+    border_pixels = np.concatenate(
+        [
+            data[0, :, :3],
+            data[h - 1, :, :3],
+            data[1:h - 1, 0, :3],
+            data[1:h - 1, w - 1, :3],
+        ],
+        axis=0,
+    ).astype(np.int16)
+    border_rgb = np.median(border_pixels, axis=0)
+
     # Boolean mask of pixels we've already enqueued
     visited = np.zeros((h, w), dtype=bool)
 
     def is_bg(y: int, x: int) -> bool:
-        r, g, b = int(data[y, x, 0]), int(data[y, x, 1]), int(data[y, x, 2])
-        return r >= threshold and g >= threshold and b >= threshold
+        r, g, b = (int(data[y, x, 0]), int(data[y, x, 1]), int(data[y, x, 2]))
+        if r >= threshold and g >= threshold and b >= threshold:
+            return True
+
+        # Keep flood-fill limited to edge-connected pixels that still resemble
+        # the sampled border color and stay close to neutral (low saturation).
+        max_delta = max(abs(r - int(border_rgb[0])), abs(g - int(border_rgb[1])), abs(b - int(border_rgb[2])))
+        saturation_delta = max(r, g, b) - min(r, g, b)
+        return max_delta <= border_tolerance and saturation_delta <= max_saturation_delta
 
     queue: deque = deque()
 
@@ -62,6 +87,19 @@ def remove_white_background(image: Image.Image, threshold: int = 230) -> Image.I
             if 0 <= ny < h and 0 <= nx < w and not visited[ny, nx] and is_bg(ny, nx):
                 visited[ny, nx] = True
                 queue.append((ny, nx))
+
+    # Light anti-aliasing so white halos at object edges fade out instead of
+    # remaining as visible fringes after compositing.
+    rgb = data[:, :, :3].astype(np.int16)
+    alpha = data[:, :, 3].astype(np.uint8)
+    near_bg = (
+        (rgb[:, :, 0] >= threshold - 18)
+        & (rgb[:, :, 1] >= threshold - 18)
+        & (rgb[:, :, 2] >= threshold - 18)
+        & (alpha > 0)
+    )
+    alpha[near_bg] = np.minimum(alpha[near_bg], 140)
+    data[:, :, 3] = alpha
 
     return Image.fromarray(data)
 

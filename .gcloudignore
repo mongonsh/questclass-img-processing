@@ -1,0 +1,14 @@
+.venv
+__pycache__
+.env
+.env.*
+*.pyc
+*.pyo
+*.pyd
+*.log
+sam_vit_h_4b8939.pth
+*.pt
+*.ckpt
+*.safetensors
+tmp
+logs

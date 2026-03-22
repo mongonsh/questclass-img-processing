@@ -1,0 +1,28 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - gcr.io/$PROJECT_ID/questclass-backend:$BUILD_ID
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - gcr.io/$PROJECT_ID/questclass-backend:$BUILD_ID
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - questclass-backend
+      - --image=gcr.io/$PROJECT_ID/questclass-backend:$BUILD_ID
+      - --region=asia-northeast1
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+      - --set-env-vars=FIREBASE_STORAGE_BUCKET=$_FIREBASE_STORAGE_BUCKET,OPENAI_API_KEY=$_OPENAI_API_KEY,STRIPE_SECRET_KEY=$_STRIPE_SECRET_KEY,STRIPE_WEBHOOK_SECRET=$_STRIPE_WEBHOOK_SECRET,REVENUECAT_STRIPE_PUBLIC_API_KEY=$_REVENUECAT_STRIPE_PUBLIC_API_KEY,STRIPE_PRICE_EXPLORER_MONTHLY=$_STRIPE_PRICE_EXPLORER_MONTHLY,STRIPE_PRICE_EXPLORER_ANNUAL=$_STRIPE_PRICE_EXPLORER_ANNUAL,STRIPE_PRICE_CREATOR_MONTHLY=$_STRIPE_PRICE_CREATOR_MONTHLY,STRIPE_PRICE_CREATOR_ANNUAL=$_STRIPE_PRICE_CREATOR_ANNUAL
+
+images:
+  - gcr.io/$PROJECT_ID/questclass-backend:$BUILD_ID
